@@ -1,0 +1,15 @@
+{
+  "name": "vote",
+  "version": "1.0.0",
+  "description": "It is a primitive vote system, it's totally experimental and just for practinig purpose, so DO NOT use it in products.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "hardhat": "^2.22.4"
+  }
+}
