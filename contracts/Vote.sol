@@ -36,7 +36,7 @@ contract Vote is ERC20, Ownable {
 
     error SetVoteTimesCantBeZero();
     error VotingIsClosed();
-    error TokenUserIsLocked(address user);
+    // error UserTokenIsLocked(address user);
 
     modifier isOpen() {
         if (block.timestamp >= startTime && block.timestamp < endTime) {
@@ -66,7 +66,7 @@ contract Vote is ERC20, Ownable {
             s_votes[round][msg.sender].amount > 0 &&
             s_votes[round][msg.sender].vote != vote
         ) {
-            revert("You've already voted opposite!");
+            revert("You've already voted on opposite!");
         }
         _transferToSubmitVote(voteAmount);
         s_votes[round][msg.sender].vote = vote;
@@ -132,6 +132,7 @@ contract Vote is ERC20, Ownable {
         emit TimeHasBeenSet(_startTime, _endTime, round, desc);
     }
 
+    /* Not a good idea to use this kind of function cause it's against policy and keeping users data private */
     /// @notice to return the amount of a user voted in specific round for clarifying
     /// @param round_ vote round
     /// @param voter user address
@@ -148,11 +149,11 @@ contract Vote is ERC20, Ownable {
     /// @return userElection return the weight of user vote based on their tokens voted
     function _howMuchVoteWeigh(address voter) internal view returns (uint) {
         uint userElection = s_votes[round][voter].amount;
-        if (userElection > 100) {
+        if (userElection >= 1500 && userElection <= 100000) {
             return userElection / 10;
-        } else if (userElection > 1000) {
+        } else if (userElection < 1000000 && userElection > 100000) {
             return userElection / 90;
-        } else if (userElection > 10000) {
+        } else if (userElection > 1000000) {
             return userElection / 910;
         }
         return userElection;

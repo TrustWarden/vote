@@ -1,7 +1,10 @@
 node_modules
+coverage
+.vscode
 
 #Hardhat files
 cache
 artifacts
 gas-report.txt
 deployments
+coverage.json
