@@ -86,11 +86,14 @@ contract Vote is ERC20, Ownable {
             return true;
         }
 
-        require(block.timestamp > endTime, "The election is not finish yet.");
+        if (_round == round && block.timestamp <= endTime) {
+            revert("The election is not finish yet.");
+        }
+
         uint amount = s_votes[_round][msg.sender].amount;
         require(
             amount > 0,
-            "The user did not attend to the prior elections or already has withdrawn their tokens."
+            "The user did not attend to the specified election round or already has withdrawn their tokens."
         );
         require(_withdrawal(msg.sender, amount), "Withdrawal failed.");
         emit MadeWithdrawal(msg.sender, amount);

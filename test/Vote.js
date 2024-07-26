@@ -199,5 +199,60 @@ describe("Vote Contract", () => {
     });
   });
 
-  describe("Withdraw:", () => {});
+  describe("Withdraw:", () => {
+    async function setupElectionAndMadeElect() {
+      const { vote, owner, alice, bob, fireStartTime, fireEndTime, desc } =
+        await loadFixture(setup);
+
+      // start vote round
+      await vote.setTimes(fireStartTime, fireEndTime, desc);
+      await time.increase(3600); // 1hr
+
+      // Getting balance and made vote
+      const balanceBeforeVote = await vote.balanceOf(owner.address);
+      const amountToVote = 5000000;
+      await vote.elect(true, amountToVote);
+
+      // increase the time by 1 day to vote be done
+      await time.increase(86400);
+
+      return { vote, owner, alice, bob, amountToVote, balanceBeforeVote };
+    }
+
+    it("Should return back correct balance after made withdraw and emit MadeWithdrawal event", async () => {
+      const { vote, owner, amountToVote, balanceBeforeVote } =
+        await loadFixture(setupElectionAndMadeElect);
+
+      expect(await vote.withdrawalRequest(1))
+        .to.emit(vote, "MadeWithdrawal")
+        .withArgs(owner.address, amountToVote);
+
+      const currentBalance = await vote.balanceOf(owner.address);
+      expect(currentBalance).to.equal(balanceBeforeVote);
+    });
+
+    it("Must revert if the election is not finish", async () => {
+      const { vote, fireStartTime, fireEndTime, desc } = await loadFixture(
+        setup
+      );
+
+      await vote.setTimes(fireStartTime, fireEndTime, desc);
+      await time.increase(3600); // 1 hr
+      await vote.elect(true, 5000000);
+
+      await expect(vote.withdrawalRequest(1)).to.be.revertedWith(
+        "The election is not finish yet."
+      );
+    });
+
+    it("Must revert if the user didn't attend to the specified round", async () => {
+      const { vote, alice } = await loadFixture(setupElectionAndMadeElect);
+
+      await expect(vote.connect(alice).withdrawalRequest(1)).to.be.revertedWith(
+        "The user did not attend to the specified election round or already has withdrawn their tokens."
+      );
+    });
+
+    it();
+  });
 });
