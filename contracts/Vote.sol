@@ -82,7 +82,8 @@ contract Vote is ERC20, Ownable {
     /// @param _round it will specify the round of election that the user wants to withdraw tokens from to assure that the round is already has done
     function withdrawalRequest(uint32 _round) external returns (bool success) {
         if (_round == round && block.timestamp < startTime - 10 minutes) {
-            // TODO: implement the logic to users be able to whithdraw before round starts and also prevent of bad acting with deleting the users votes' from mapping storage
+            _evaluateUserVoteToRemove();
+            return true;
         }
 
         require(block.timestamp > endTime, "The election is not finish yet.");
@@ -91,7 +92,7 @@ contract Vote is ERC20, Ownable {
             amount > 0,
             "The user did not attend to the prior elections or already has withdrawn their tokens."
         );
-        _withdrawal(msg.sender, amount);
+        require(_withdrawal(msg.sender, amount), "Withdrawal failed.");
         emit MadeWithdrawal(msg.sender, amount);
         return true;
     }
@@ -167,7 +168,17 @@ contract Vote is ERC20, Ownable {
     ) internal returns (bool success) {
         // super.approve(msg.sender, _value);
         // bool result = ERC20.transferFrom(_msgSender(), address(this), _value);
-        require(transfer(address(this), _value), "Tx failed.");
+        require(transfer(address(this), _value), "Transfer failed.");
+        return true;
+    }
+
+    function _evaluateUserVoteToRemove() private returns (bool success) {
+        UserVote memory userVote = s_votes[round][msg.sender];
+        uint weightAmount = _howMuchVoteWeigh(msg.sender);
+        s_resultWithWeight[round][userVote.vote] -= weightAmount;
+        s_votes[round][msg.sender].vote = false;
+        s_votes[round][msg.sender].amount = 0;
+        require(_withdrawal(msg.sender, userVote.amount), "Withdrawal failed.");
         return true;
     }
 
@@ -184,25 +195,3 @@ contract Vote is ERC20, Ownable {
         return true;
     }
 }
-
-// function _approve(address _spender, uint _amount) private returns (bool) {
-//     approve(_spender, _amount)
-//     // _allowances[address(this)][_spender] = _amount;
-//     // emit ApproveInternal(_spender, _amount);
-//     // return true;
-// }
-
-// function _checkIfLocked(address user) internal view returns (bool) {
-//     if ( s_votes[round][user].amount > 0 ) {
-//         return false;
-//     }
-// }
-
-/// @dev after an election has done owner must trigger the function to vote be done and individuals can withdraw their tokens
-// function _ElectionStatusToFinish() private {
-
-// }
-
-// function _determineUserVoteToLock(address user) private view returns (uint) {
-//     return s_votes[round][user].amount;
-// }
