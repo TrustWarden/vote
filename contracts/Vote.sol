@@ -34,15 +34,15 @@ contract Vote is ERC20, Ownable {
     event MadeWithdrawal(address indexed voter, uint amount);
     // event ApproveInternal(address indexed spender, uint amount);
 
-    error SetVoteTimesCantBeZero();
-    error VotingIsClosed();
-    // error UserTokenIsLocked(address user);
+    error Vote__SetVoteTimesCantBeZero();
+    error Vote__VotingIsClosed();
+    // error Vote__UserTokenIsLocked(address user);
 
     modifier isOpen() {
         if (block.timestamp >= startTime && block.timestamp < endTime) {
             _;
         } else {
-            revert VotingIsClosed();
+            revert Vote__VotingIsClosed();
         }
     }
 
@@ -53,7 +53,6 @@ contract Vote is ERC20, Ownable {
     }
 
     /// @notice to submit users vote and make a transaction their tokens to Vote contract and the contract will keep them until the end of election round time.
-    /// @dev note make the transfer to transferFrom to contract have the control to take the determined amount instead of user send it directly
     function elect(
         bool vote,
         uint256 voteAmount
@@ -77,16 +76,21 @@ contract Vote is ERC20, Ownable {
     }
 
     /// @notice it will trigger a withdraw request by user
-    /// @dev it will trigger a withdraw request by user to get their locked tokens if they have any locked token in provided round. for now users must input the round to check whether they have anything
-    /// @dev note implement the logic to users be able to whithdraw before round starts and also prevent of bad acting with deleting the users votes' from mapping storage
+    /// @notice user can withdraw before the end of election round and their vote will become false and zero amount token
     /// @param _round it will specify the round of election that the user wants to withdraw tokens from to assure that the round is already has done
     function withdrawalRequest(uint32 _round) external returns (bool success) {
-        if (_round == round && block.timestamp < startTime - 10 minutes) {
-            _evaluateUserVoteToRemove();
+        // trigger withdraw before 30mins end of the election
+        if (_round == round && block.timestamp < endTime - 30 minutes) {
+            _evaluateUserVoteToRemoveBeforeEnd();
             return true;
         }
 
-        if (_round == round && block.timestamp <= endTime) {
+        // close and suspend anyone to withdraw until the endTime exceed
+        if (
+            _round == round &&
+            block.timestamp >= endTime - 30 minutes &&
+            block.timestamp <= endTime
+        ) {
             revert("The election is not finish yet.");
         }
 
@@ -95,7 +99,7 @@ contract Vote is ERC20, Ownable {
             amount > 0,
             "The user did not attend to the specified election round or already has withdrawn their tokens."
         );
-        require(_withdrawal(msg.sender, amount), "Withdrawal failed.");
+        require(_safeWithdrawal(msg.sender, amount), "Withdrawal failed.");
         emit MadeWithdrawal(msg.sender, amount);
         return true;
     }
@@ -120,11 +124,16 @@ contract Vote is ERC20, Ownable {
         uint32 _endTime,
         string memory _desc
     ) public onlyOwner {
-        if (_startTime == 0 || _endTime == 0) {
-            revert SetVoteTimesCantBeZero();
+        if (endTime >= block.timestamp) {
+            revert("Vote is still ongoing, need to be done.");
         }
+
+        if (_startTime == 0 || _endTime == 0) {
+            revert Vote__SetVoteTimesCantBeZero();
+        }
+
         require(_startTime > block.timestamp, "The time has already over.");
-        // @TODO add to the require that vote last at least for about 72h to avoid time difference and also users know about ongoing voting
+
         require(
             _startTime < _endTime,
             "The start time of voting can not be set before the end time."
@@ -169,28 +178,32 @@ contract Vote is ERC20, Ownable {
     function _transferToSubmitVote(
         uint _value
     ) internal returns (bool success) {
-        // super.approve(msg.sender, _value);
-        // bool result = ERC20.transferFrom(_msgSender(), address(this), _value);
         require(transfer(address(this), _value), "Transfer failed.");
         return true;
     }
 
-    function _evaluateUserVoteToRemove() private returns (bool success) {
+    function _evaluateUserVoteToRemoveBeforeEnd()
+        private
+        returns (bool success)
+    {
         UserVote memory userVote = s_votes[round][msg.sender];
         uint weightAmount = _howMuchVoteWeigh(msg.sender);
         s_resultWithWeight[round][userVote.vote] -= weightAmount;
         s_votes[round][msg.sender].vote = false;
         s_votes[round][msg.sender].amount = 0;
-        require(_withdrawal(msg.sender, userVote.amount), "Withdrawal failed.");
+        require(
+            _safeWithdrawal(msg.sender, userVote.amount),
+            "Withdrawal failed."
+        );
         return true;
     }
 
+    /// @dev NEED WORK - implement the logic to prevent users withdraw more than their assets
     /// @notice will give the user the ability to get their tokens back
-    /// @dev note change transferFrom to transfer directly to avoid users have the ability to take control over contract assets
     /// @param to msg.sender the user address
     /// @param _amount amount of tokens
     /// @return success whether it is true or false
-    function _withdrawal(
+    function _safeWithdrawal(
         address to,
         uint _amount
     ) private returns (bool success) {
