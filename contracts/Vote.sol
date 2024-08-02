@@ -198,11 +198,12 @@ contract Vote is ERC20, Ownable {
     }
 
     /// @notice will check how much weigh a user's vote is, and decrease it from s_votes and s_resultWithWeight
-    function _evaluateUserVoteToRemoveBeforeEnd()
-        private
-    {
+    function _evaluateUserVoteToRemoveBeforeEnd() private {
         UserVote memory userVote = s_votes[round][msg.sender];
-        require(userVote.amount > 0, "User did not vote in the election or already withdrew.")
+        require(
+            userVote.amount > 0,
+            "User did not vote in the election or has already withdrawn."
+        );
         uint weightAmount = _howMuchVoteWeigh(msg.sender);
         s_resultWithWeight[round][userVote.vote] -= weightAmount;
         s_votes[round][msg.sender].vote = false;
@@ -219,7 +220,7 @@ contract Vote is ERC20, Ownable {
     /// @return success whether it is true or false
     function _safeWithdrawal(
         address to,
-        uint _round,
+        uint32 _round,
         uint _amount
     ) private returns (bool success) {
         s_votes[_round][msg.sender].withdraw = true;

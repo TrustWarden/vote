@@ -112,12 +112,12 @@ describe("Vote Contract", () => {
       ).to.be.revertedWith("The time has already over.");
     });
 
-    it("Should throw an error when input zero to start or end times", async () => {
+    it("Must throw an error when input zero to start or end times", async () => {
       const { vote } = await loadFixture(setup);
 
       await expect(
         vote.setTimes(0, 0, "Testing zero time")
-      ).to.be.revertedWithCustomError(vote, "SetVoteTimesCantBeZero");
+      ).to.be.revertedWithCustomError(vote, "Vote__SetVoteTimesCantBeZero");
     });
 
     it("Must revert when entring start time with smaller input than end time", async () => {
@@ -227,7 +227,7 @@ describe("Vote Contract", () => {
 
       await expect(vote.elect(true, 1000)).to.be.revertedWithCustomError(
         vote,
-        "VotingIsClosed"
+        "Vote__VotingIsClosed"
       );
     });
   });
@@ -300,8 +300,31 @@ describe("Vote Contract", () => {
       expect(await vote.balanceOf(owner.address)).to.equal(1e10 - amountToVote);
     });
 
-    it("User should be able to give up from ongoing attended election and it's not finished yet, also get back their tokens and erase their vote from the leadger correctly", async () => {
-      const { vote, owner } = await loadFixture(setupElectionAndMadeElect);
+    it("User should be able to give up from ongoing attended election and it's not finished yet, also get back their tokens and erase their vote from the ledger correctly", async () => {
+      const { vote, owner, fireStartTime, fireEndTime, desc } =
+        await loadFixture(setup);
+
+      // start vote round
+      await vote.setTimes(fireStartTime, fireEndTime, desc);
+      await time.increase(3600); // 1hr
+
+      // Getting balance and made vote
+      const balanceBeforeVote = await vote.balanceOf(owner.address);
+      const amountToVote = 5000000;
+      await vote.elect(true, amountToVote);
+
+      await vote.withdrawalRequest(1);
+
+      // check balances
+      expect(await vote.balanceOf(owner.address)).to.be.equal(
+        balanceBeforeVote
+      );
+      expect(await vote.balanceOf(vote.target)).to.be.equal(0);
+      // check the vote weighted amount erase correctly
+      expect(await vote.getResultWithWeight(1, true)).to.be.equal(0);
+      expect(
+        await vote.howMuchAUserVotedPerRound(1, owner.address)
+      ).to.be.equal(0);
     });
 
     it("Must revert near to the end of the ongoing election (approximately 30mins)", async () => {
@@ -324,17 +347,16 @@ describe("Vote Contract", () => {
       );
 
       await expect(vote.connect(alice).withdrawalRequest(1)).to.be.revertedWith(
-        "The user did not attend to the specified election round or already has withdrawn their tokens."
+        "The user did not attend to the specified election round."
       );
     });
 
-    // NEED WORK
-    it.skip("Must revert if the user already made a withdraw their assets in a specified round and trigger withdraw again", async () => {
-      const { vote, owner } = await loadFixture(setupElectionAndMadeElect);
+    it("Must revert if the user already made a withdraw their assets in a specified round and trigger withdraw again", async () => {
+      const { vote } = await loadFixture(setupElectionAndMadeElect);
 
       await vote.withdrawalRequest(1);
       await expect(vote.withdrawalRequest(1)).to.be.revertedWith(
-        "The user did not attend to the specified election round or already has withdrawn their tokens."
+        "User has already withdrawn"
       );
     });
   });
