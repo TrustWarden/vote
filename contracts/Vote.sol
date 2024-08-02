@@ -15,6 +15,7 @@ contract Vote is ERC20, Ownable {
     struct UserVote {
         bool vote;
         uint amount;
+        bool withdraw;
     }
 
     string public desc;
@@ -68,17 +69,27 @@ contract Vote is ERC20, Ownable {
             revert("You've already voted on opposite!");
         }
         _transferToSubmitVote(voteAmount);
+        // initialize user's vote
         s_votes[round][msg.sender].vote = vote;
         s_votes[round][msg.sender].amount += voteAmount;
+        s_votes[round][msg.sender].withdraw = false;
+
         s_resultWithWeight[round][vote] = _howMuchVoteWeigh(msg.sender); // It is a premetitive protection against bad behaver from big wallets, it will weigh their votes by divide into 10, 90, 910 once tokens go further than specified thresholds
         emit VoteSubmited(vote, voteAmount);
         return true;
     }
 
     /// @notice it will trigger a withdraw request by user
+    /// @notice users can withdraw from each round seperately and only once
     /// @notice user can withdraw before the end of election round and their vote will become false and zero amount token
     /// @param _round it will specify the round of election that the user wants to withdraw tokens from to assure that the round is already has done
     function withdrawalRequest(uint32 _round) external returns (bool success) {
+        // check whether user withdrawn or not
+        require(
+            !s_votes[_round][msg.sender].withdraw,
+            "User has already withdrawn"
+        );
+
         // trigger withdraw before 30mins end of the election
         if (_round == round && block.timestamp < endTime - 30 minutes) {
             _evaluateUserVoteToRemoveBeforeEnd();
@@ -97,9 +108,13 @@ contract Vote is ERC20, Ownable {
         uint amount = s_votes[_round][msg.sender].amount;
         require(
             amount > 0,
-            "The user did not attend to the specified election round or already has withdrawn their tokens."
+            "The user did not attend to the specified election round."
         );
-        require(_safeWithdrawal(msg.sender, amount), "Withdrawal failed.");
+        // will keep the amount their voted but lock user to withdraw more than once in a round
+        require(
+            _safeWithdrawal(msg.sender, _round, amount),
+            "Withdrawal failed."
+        );
         emit MadeWithdrawal(msg.sender, amount);
         return true;
     }
@@ -182,31 +197,32 @@ contract Vote is ERC20, Ownable {
         return true;
     }
 
+    /// @notice will check how much weigh a user's vote is, and decrease it from s_votes and s_resultWithWeight
     function _evaluateUserVoteToRemoveBeforeEnd()
         private
-        returns (bool success)
     {
         UserVote memory userVote = s_votes[round][msg.sender];
+        require(userVote.amount > 0, "User did not vote in the election or already withdrew.")
         uint weightAmount = _howMuchVoteWeigh(msg.sender);
         s_resultWithWeight[round][userVote.vote] -= weightAmount;
         s_votes[round][msg.sender].vote = false;
         s_votes[round][msg.sender].amount = 0;
         require(
-            _safeWithdrawal(msg.sender, userVote.amount),
+            _safeWithdrawal(msg.sender, round, userVote.amount),
             "Withdrawal failed."
         );
-        return true;
     }
 
-    /// @dev NEED WORK - implement the logic to prevent users withdraw more than their assets
     /// @notice will give the user the ability to get their tokens back
     /// @param to msg.sender the user address
     /// @param _amount amount of tokens
     /// @return success whether it is true or false
     function _safeWithdrawal(
         address to,
+        uint _round,
         uint _amount
     ) private returns (bool success) {
+        s_votes[_round][msg.sender].withdraw = true;
         _transfer(address(this), to, _amount);
         return true;
     }
