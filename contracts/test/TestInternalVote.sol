@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 import "../Vote.sol";
 
 contract TestInternalVote is Vote {
-    constructor() Vote(1e10) {}
+    constructor(uint _initial) Vote(_initial) {}
 
     function exposed_howMuchVoteWeigh(
         address target

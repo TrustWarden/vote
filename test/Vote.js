@@ -11,7 +11,7 @@ describe("Vote Contract", () => {
     const oneDay = 60 * 60 * 24;
     const fixedAmountMint = 1e10; // amount to mint at contructor as total supply
 
-    const [owner, alice, bob] = await ethers.getSigners();
+    const [owner, alice, bob, patrick] = await ethers.getSigners();
     const Vote = await ethers.getContractFactory("Vote");
     const vote = await Vote.deploy(fixedAmountMint);
 
@@ -24,6 +24,7 @@ describe("Vote Contract", () => {
       owner, // 1st address
       alice, // 2nd address
       bob, // 3rd address
+      patrick, // 4th address
       oneDay,
       fireStartTime,
       fireEndTime,
@@ -181,10 +182,58 @@ describe("Vote Contract", () => {
       );
     });
 
-    // cause the _howMuchVoteWeigh is internal function, use TestVote to expose the internal functions to be able to test
+    it("Should calculate correct weight for vote amount of each users with different amount", async () => {
+      const { owner, alice, bob, patrick, fireStartTime, fireEndTime, desc } =
+        await loadFixture(setup);
+
+      const VoteTest = await ethers.getContractFactory("TestInternalVote");
+      const voteTest = await VoteTest.deploy(1e10);
+      voteTest.waitForDeployment();
+
+      await voteTest.transfer(alice.address, 500000);
+      await voteTest.transfer(bob.address, 50000);
+      await voteTest.transfer(patrick.address, 500);
+
+      expect(await voteTest.balanceOf(alice.address)).to.be.equal(500000);
+      expect(await voteTest.balanceOf(bob.address)).to.be.equal(50000);
+      expect(await voteTest.balanceOf(patrick.address)).to.be.equal(500);
+
+      await voteTest.setTimes(fireStartTime, fireEndTime, desc);
+      await time.increase(3600); // 1hr
+
+      const ownerAmount = 5000000;
+      await voteTest.elect(true, ownerAmount);
+      const aliceAmount = 500000;
+      await voteTest.connect(alice).elect(false, aliceAmount);
+      const bobAmount = 50000;
+      await voteTest.connect(bob).elect(true, bobAmount);
+      const patrickAmount = 500;
+      await voteTest.connect(patrick).elect(true, patrickAmount);
+
+      // both ways check, exact number and the return value from storage
+      expect(
+        await voteTest.exposed_howMuchVoteWeigh(owner.address)
+      ).to.be.equal(5494); // 5.000.000 / 910
+      expect(
+        await voteTest.exposed_howMuchVoteWeigh(alice.address)
+      ).to.be.equal(
+        await voteTest.connect(alice).getResultWithWeight(1, false)
+      ); // 500.000 / 90
+      expect(await voteTest.exposed_howMuchVoteWeigh(bob.address)).to.be.equal(
+        5000
+      ); // 50.000 / 10
+      expect(
+        await voteTest.exposed_howMuchVoteWeigh(patrick.address)
+      ).to.be.equal(patrickAmount);
+    });
+
     it("Should save correct weighted vote in mapping result", async () => {
-      const TestVote = await ethers.getContractFactory("TestInternalVote");
-      const testVote = await TestVote.deploy();
+      const Vote = await ethers.getContractFactory("Vote");
+      const vote = await Vote.deploy(1e10);
+      await vote.waitForDeployment();
+      // cause the _howMuchVoteWeigh is internal function, use TestVote to expose the internal functions to be able to test
+      const VoteTest = await ethers.getContractFactory("TestInternalVote");
+      const voteTest = await VoteTest.deploy(vote.target);
       const [owner] = await ethers.getSigners();
 
       const oneDay = 60 * 60 * 24;
@@ -193,12 +242,12 @@ describe("Vote Contract", () => {
       const desc = "Let's make the Web3 great again!";
       const amountToVote = 5000000;
 
-      await testVote.setTimes(fireStartTime, fireEndTime, desc);
+      await voteTest.setTimes(fireStartTime, fireEndTime, desc);
       await time.increase(3600);
-      await testVote.elect(true, amountToVote);
+      await voteTest.elect(true, amountToVote);
 
-      expect(await testVote.exposed_howMuchVoteWeigh(owner.address)).to.equal(
-        Number(await testVote.getResultWithWeight(1, true))
+      expect(await voteTest.exposed_howMuchVoteWeigh(owner.address)).to.equal(
+        Number(await voteTest.getResultWithWeight(1, true))
       );
     });
 
